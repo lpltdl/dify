@@ -6,7 +6,7 @@ import { createContext, useContext, useContextSelector } from 'use-context-selec
 import { useRouter, useSearchParams } from 'next/navigation'
 import AccountSetting from '@/app/components/header/account-setting'
 import ApiBasedExtensionModal from '@/app/components/header/account-setting/api-based-extension-page/modal'
-import ModerationSettingModal from '@/app/components/app/configuration/toolbox/moderation/moderation-setting-modal'
+import ModerationSettingModal from '@/app/components/base/features/new-feature-panel/moderation/moderation-setting-modal'
 import ExternalDataToolModal from '@/app/components/app/configuration/tools/external-data-tool-modal'
 import AnnotationFullModal from '@/app/components/billing/annotation-full/modal'
 import ModelModal from '@/app/components/header/account-setting/model-provider-page/model-modal'
@@ -17,9 +17,11 @@ import type {
   ModelLoadBalancingConfigEntry,
   ModelProvider,
 } from '@/app/components/header/account-setting/model-provider-page/declarations'
-
+import {
+  EDUCATION_VERIFYING_LOCALSTORAGE_ITEM,
+} from '@/app/education-apply/constants'
 import Pricing from '@/app/components/billing/pricing'
-import type { ModerationConfig } from '@/models/debug'
+import type { ModerationConfig, PromptVariable } from '@/models/debug'
 import type {
   ApiBasedExtension,
   ExternalDataTool,
@@ -28,6 +30,12 @@ import type { CreateExternalAPIReq } from '@/app/components/datasets/external-ap
 import ModelLoadBalancingEntryModal from '@/app/components/header/account-setting/model-provider-page/model-modal/model-load-balancing-entry-modal'
 import type { ModelLoadBalancingModalProps } from '@/app/components/header/account-setting/model-provider-page/provider-added-card/model-load-balancing-modal'
 import ModelLoadBalancingModal from '@/app/components/header/account-setting/model-provider-page/provider-added-card/model-load-balancing-modal'
+import OpeningSettingModal from '@/app/components/base/features/new-feature-panel/conversation-opener/modal'
+import type { OpeningStatement } from '@/app/components/base/features/types'
+import type { InputVar } from '@/app/components/workflow/types'
+import type { UpdatePluginPayload } from '@/app/components/plugins/types'
+import UpdatePlugin from '@/app/components/plugins/update-plugin'
+import { removeSpecificQueryParam } from '@/utils'
 
 export type ModalState<T> = {
   payload: T
@@ -49,6 +57,7 @@ export type LoadBalancingEntryModalType = ModelModalType & {
   entry?: ModelLoadBalancingConfigEntry
   index?: number
 }
+
 export type ModalContextState = {
   setShowAccountSettingModal: Dispatch<SetStateAction<ModalState<string> | null>>
   setShowApiBasedExtensionModal: Dispatch<SetStateAction<ModalState<ApiBasedExtension> | null>>
@@ -60,6 +69,12 @@ export type ModalContextState = {
   setShowExternalKnowledgeAPIModal: Dispatch<SetStateAction<ModalState<CreateExternalAPIReq> | null>>
   setShowModelLoadBalancingModal: Dispatch<SetStateAction<ModelLoadBalancingModalProps | null>>
   setShowModelLoadBalancingEntryModal: Dispatch<SetStateAction<ModalState<LoadBalancingEntryModalType> | null>>
+  setShowOpeningModal: Dispatch<SetStateAction<ModalState<OpeningStatement & {
+    promptVariables?: PromptVariable[]
+    workflowVariables?: InputVar[]
+    onAutoAddPromptVariable?: (variable: PromptVariable[]) => void
+  }> | null>>
+  setShowUpdatePluginModal: Dispatch<SetStateAction<ModalState<UpdatePluginPayload> | null>>
 }
 const ModalContext = createContext<ModalContextState>({
   setShowAccountSettingModal: () => { },
@@ -72,13 +87,14 @@ const ModalContext = createContext<ModalContextState>({
   setShowExternalKnowledgeAPIModal: () => { },
   setShowModelLoadBalancingModal: () => { },
   setShowModelLoadBalancingEntryModal: () => { },
+  setShowOpeningModal: () => { },
+  setShowUpdatePluginModal: () => { },
 })
 
 export const useModalContext = () => useContext(ModalContext)
 
 // Adding a dangling comma to avoid the generic parsing issue in tsx, see:
 // https://github.com/microsoft/TypeScript/issues/15713
-// eslint-disable-next-line @typescript-eslint/comma-dangle
 export const useModalContextSelector = <T,>(selector: (state: ModalContextState) => T): T =>
   useContextSelector(ModalContext, selector)
 
@@ -96,11 +112,24 @@ export const ModalContextProvider = ({
   const [showExternalKnowledgeAPIModal, setShowExternalKnowledgeAPIModal] = useState<ModalState<CreateExternalAPIReq> | null>(null)
   const [showModelLoadBalancingModal, setShowModelLoadBalancingModal] = useState<ModelLoadBalancingModalProps | null>(null)
   const [showModelLoadBalancingEntryModal, setShowModelLoadBalancingEntryModal] = useState<ModalState<LoadBalancingEntryModalType> | null>(null)
+  const [showOpeningModal, setShowOpeningModal] = useState<ModalState<OpeningStatement & {
+    promptVariables?: PromptVariable[]
+    workflowVariables?: InputVar[]
+    onAutoAddPromptVariable?: (variable: PromptVariable[]) => void
+  }> | null>(null)
+  const [showUpdatePluginModal, setShowUpdatePluginModal] = useState<ModalState<UpdatePluginPayload> | null>(null)
+
   const searchParams = useSearchParams()
   const router = useRouter()
   const [showPricingModal, setShowPricingModal] = useState(searchParams.get('show-pricing') === '1')
   const [showAnnotationFullModal, setShowAnnotationFullModal] = useState(false)
   const handleCancelAccountSettingModal = () => {
+    const educationVerifying = localStorage.getItem(EDUCATION_VERIFYING_LOCALSTORAGE_ITEM)
+
+    if (educationVerifying === 'yes')
+      localStorage.removeItem(EDUCATION_VERIFYING_LOCALSTORAGE_ITEM)
+
+    removeSpecificQueryParam('action')
     setShowAccountSettingModal(null)
     if (showAccountSettingModal?.onCancelCallback)
       showAccountSettingModal?.onCancelCallback()
@@ -153,6 +182,12 @@ export const ModalContextProvider = ({
     setShowModelLoadBalancingEntryModal(null)
   }, [showModelLoadBalancingEntryModal])
 
+  const handleCancelOpeningModal = useCallback(() => {
+    setShowOpeningModal(null)
+    if (showOpeningModal?.onCancelCallback)
+      showOpeningModal.onCancelCallback()
+  }, [showOpeningModal])
+
   const handleSaveModelLoadBalancingEntryModal = useCallback((entry: ModelLoadBalancingConfigEntry) => {
     showModelLoadBalancingEntryModal?.onSaveCallback?.({
       ...showModelLoadBalancingEntryModal.payload,
@@ -190,6 +225,12 @@ export const ModalContextProvider = ({
     return true
   }
 
+  const handleSaveOpeningModal = (newOpening: OpeningStatement) => {
+    if (showOpeningModal?.onSaveCallback)
+      showOpeningModal.onSaveCallback(newOpening)
+    setShowOpeningModal(null)
+  }
+
   return (
     <ModalContext.Provider value={{
       setShowAccountSettingModal,
@@ -202,6 +243,8 @@ export const ModalContextProvider = ({
       setShowExternalKnowledgeAPIModal,
       setShowModelLoadBalancingModal,
       setShowModelLoadBalancingEntryModal,
+      setShowOpeningModal,
+      setShowUpdatePluginModal,
     }}>
       <>
         {children}
@@ -299,6 +342,32 @@ export const ModalContextProvider = ({
               onCancel={handleCancelModelLoadBalancingEntryModal}
               onSave={handleSaveModelLoadBalancingEntryModal}
               onRemove={handleRemoveModelLoadBalancingEntry}
+            />
+          )
+        }
+        {showOpeningModal && (
+          <OpeningSettingModal
+            data={showOpeningModal.payload}
+            onSave={handleSaveOpeningModal}
+            onCancel={handleCancelOpeningModal}
+            promptVariables={showOpeningModal.payload.promptVariables}
+            workflowVariables={showOpeningModal.payload.workflowVariables}
+            onAutoAddPromptVariable={showOpeningModal.payload.onAutoAddPromptVariable}
+          />
+        )}
+
+        {
+          !!showUpdatePluginModal && (
+            <UpdatePlugin
+              {...showUpdatePluginModal.payload}
+              onCancel={() => {
+                setShowUpdatePluginModal(null)
+                showUpdatePluginModal.onCancelCallback?.()
+              }}
+              onSave={() => {
+                setShowUpdatePluginModal(null)
+                showUpdatePluginModal.onSaveCallback?.({} as any)
+              }}
             />
           )
         }

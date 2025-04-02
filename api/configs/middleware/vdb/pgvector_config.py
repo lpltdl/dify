@@ -14,7 +14,7 @@ class PGVectorConfig(BaseSettings):
         default=None,
     )
 
-    PGVECTOR_PORT: Optional[PositiveInt] = Field(
+    PGVECTOR_PORT: PositiveInt = Field(
         description="Port number on which the PostgreSQL server is listening (default is 5433)",
         default=5433,
     )
@@ -42,4 +42,9 @@ class PGVectorConfig(BaseSettings):
     PGVECTOR_MAX_CONNECTION: PositiveInt = Field(
         description="Max connection of the PostgreSQL database",
         default=5,
+    )
+
+    PGVECTOR_PG_BIGM: bool = Field(
+        description="Whether to use pg_bigm module for full text search",
+        default=False,
     )

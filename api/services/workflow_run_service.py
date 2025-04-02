@@ -1,11 +1,15 @@
+import threading
+from typing import Optional
+
+import contexts
 from extensions.ext_database import db
 from libs.infinite_scroll_pagination import InfiniteScrollPagination
+from models.enums import WorkflowRunTriggeredFrom
 from models.model import App
 from models.workflow import (
     WorkflowNodeExecution,
     WorkflowNodeExecutionTriggeredFrom,
     WorkflowRun,
-    WorkflowRunTriggeredFrom,
 )
 
 
@@ -92,7 +96,7 @@ class WorkflowRunService:
 
         return InfiniteScrollPagination(data=workflow_runs, limit=limit, has_more=has_more)
 
-    def get_workflow_run(self, app_model: App, run_id: str) -> WorkflowRun:
+    def get_workflow_run(self, app_model: App, run_id: str) -> Optional[WorkflowRun]:
         """
         Get workflow run detail
 
@@ -116,6 +120,9 @@ class WorkflowRunService:
         Get workflow run node execution list
         """
         workflow_run = self.get_workflow_run(app_model, run_id)
+
+        contexts.plugin_tool_providers.set({})
+        contexts.plugin_tool_providers_lock.set(threading.Lock())
 
         if not workflow_run:
             return []

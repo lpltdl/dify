@@ -1,7 +1,7 @@
 import { BlockEnum, type NodeDefault } from '../../types'
 import { type IfElseNodeType, LogicalOperator } from './types'
 import { isEmptyRelatedOperator } from './utils'
-import { ALL_CHAT_AVAILABLE_BLOCKS, ALL_COMPLETION_AVAILABLE_BLOCKS } from '@/app/components/workflow/constants'
+import { ALL_CHAT_AVAILABLE_BLOCKS, ALL_COMPLETION_AVAILABLE_BLOCKS } from '@/app/components/workflow/blocks'
 const i18nPrefix = 'workflow.errorMsg'
 
 const nodeDefault: NodeDefault<IfElseNodeType> = {
@@ -49,8 +49,25 @@ const nodeDefault: NodeDefault<IfElseNodeType> = {
           errorMessages = t(`${i18nPrefix}.fieldRequired`, { field: t(`${i18nPrefix}.fields.variable`) })
         if (!errorMessages && !condition.comparison_operator)
           errorMessages = t(`${i18nPrefix}.fieldRequired`, { field: t('workflow.nodes.ifElse.operator') })
-        if (!errorMessages && !isEmptyRelatedOperator(condition.comparison_operator!) && !condition.value)
-          errorMessages = t(`${i18nPrefix}.fieldRequired`, { field: t(`${i18nPrefix}.fields.variableValue`) })
+        if (!errorMessages) {
+          if (condition.sub_variable_condition) {
+            const isSet = condition.sub_variable_condition.conditions.every((c) => {
+              if (!c.comparison_operator)
+                return false
+
+              if (isEmptyRelatedOperator(c.comparison_operator!))
+                return true
+
+              return !!c.value
+            })
+            if (!isSet)
+              errorMessages = t(`${i18nPrefix}.fieldRequired`, { field: t(`${i18nPrefix}.fields.variableValue`) })
+          }
+          else {
+            if (!isEmptyRelatedOperator(condition.comparison_operator!) && !condition.value)
+              errorMessages = t(`${i18nPrefix}.fieldRequired`, { field: t(`${i18nPrefix}.fields.variableValue`) })
+          }
+        }
       })
     })
     return {

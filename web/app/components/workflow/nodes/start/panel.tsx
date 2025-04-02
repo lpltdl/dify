@@ -40,7 +40,7 @@ const Panel: FC<NodePanelProps<StartNodeType>> = ({
 
   return (
     <div className='mt-2'>
-      <div className='px-4 pb-2 space-y-4'>
+      <div className='space-y-4 px-4 pb-2'>
         <Field
           title={t(`${i18nPrefix}.inputField`)}
           operations={
@@ -73,6 +73,7 @@ const Panel: FC<NodePanelProps<StartNodeType>> = ({
 
               <VarItem
                 readonly
+                showLegacyBadge={!isChatMode}
                 payload={{
                   variable: 'sys.files',
                 } as any}
@@ -121,6 +122,39 @@ const Panel: FC<NodePanelProps<StartNodeType>> = ({
                   </div>
                 }
               />
+              <VarItem
+                readonly
+                payload={{
+                  variable: 'sys.app_id',
+                } as any}
+                rightContent={
+                  <div className='text-xs font-normal text-gray-500'>
+                    String
+                  </div>
+                }
+              />
+              <VarItem
+                readonly
+                payload={{
+                  variable: 'sys.workflow_id',
+                } as any}
+                rightContent={
+                  <div className='text-xs font-normal text-gray-500'>
+                    String
+                  </div>
+                }
+              />
+              <VarItem
+                readonly
+                payload={{
+                  variable: 'sys.workflow_run_id',
+                } as any}
+                rightContent={
+                  <div className='text-xs font-normal text-gray-500'>
+                    String
+                  </div>
+                }
+              />
             </div>
 
           </>
@@ -130,6 +164,7 @@ const Panel: FC<NodePanelProps<StartNodeType>> = ({
       {isShowAddVarModal && (
         <ConfigVarModal
           isCreate
+          supportFile
           isShow={isShowAddVarModal}
           onClose={hideAddVarModal}
           onConfirm={handleAddVarConfirm}

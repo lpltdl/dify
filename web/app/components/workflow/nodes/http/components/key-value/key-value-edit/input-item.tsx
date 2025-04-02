@@ -18,6 +18,7 @@ type Props = {
   onRemove?: () => void
   placeholder?: string
   readOnly?: boolean
+  isSupportFile?: boolean
   insertVarTipToLeft?: boolean
 }
 
@@ -31,6 +32,7 @@ const InputItem: FC<Props> = ({
   onRemove,
   placeholder,
   readOnly,
+  isSupportFile,
   insertVarTipToLeft,
 }) => {
   const { t } = useTranslation()
@@ -41,7 +43,11 @@ const InputItem: FC<Props> = ({
   const { availableVars, availableNodesWithParent } = useAvailableVarList(nodeId, {
     onlyLeafNodeVar: false,
     filterVar: (varPayload: Var) => {
-      return [VarType.string, VarType.number, VarType.secret].includes(varPayload.type)
+      const supportVarTypes = [VarType.string, VarType.number, VarType.secret]
+      if (isSupportFile)
+        supportVarTypes.push(...[VarType.file, VarType.arrayFile])
+
+      return supportVarTypes.includes(varPayload.type)
     },
   })
 
@@ -51,7 +57,7 @@ const InputItem: FC<Props> = ({
   }, [onRemove])
 
   return (
-    <div className={cn(className, 'hover:bg-gray-50 hover:cursor-text', 'relative flex h-full')}>
+    <div className={cn(className, 'hover:cursor-text hover:bg-gray-50', 'relative flex h-full')}>
       {(!readOnly)
         ? (
           <Input
@@ -70,13 +76,13 @@ const InputItem: FC<Props> = ({
           />
         )
         : <div
-          className="pl-0.5 w-full h-[18px] leading-[18px]"
+          className="h-[18px] w-full pl-0.5 leading-[18px]"
         >
-          {!hasValue && <div className='text-gray-300 text-xs font-normal'>{placeholder}</div>}
+          {!hasValue && <div className='text-xs font-normal text-gray-300'>{placeholder}</div>}
           {hasValue && (
             <Input
               instanceId={instanceId}
-              className={cn(isFocus ? 'shadow-xs bg-gray-50 border-gray-300' : 'bg-gray-100 border-gray-100', 'w-0 grow rounded-lg px-3 py-[6px] border')}
+              className={cn(isFocus ? 'border-gray-300 bg-gray-50 shadow-xs' : 'border-gray-100 bg-gray-100', 'w-0 grow rounded-lg border px-3 py-[6px]')}
               value={value}
               onChange={onChange}
               readOnly={readOnly}
@@ -93,7 +99,7 @@ const InputItem: FC<Props> = ({
         </div>}
       {hasRemove && !isFocus && (
         <RemoveButton
-          className='group-hover:block hidden absolute right-1 top-0.5'
+          className='absolute right-1 top-0.5 hidden group-hover:block'
           onClick={handleRemove}
         />
       )}

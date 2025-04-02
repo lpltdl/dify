@@ -3,11 +3,12 @@
 import type { MouseEventHandler } from 'react'
 import { useState } from 'react'
 import { RiCloseLine } from '@remixicon/react'
-import { BookOpenIcon } from '@heroicons/react/24/outline'
 import { useContext } from 'use-context-selector'
 import { useTranslation } from 'react-i18next'
 import cn from '@/utils/classnames'
 import Button from '@/app/components/base/button'
+import Input from '@/app/components/base/input'
+import Textarea from '@/app/components/base/textarea'
 import Modal from '@/app/components/base/modal'
 import { ToastContext } from '@/app/components/base/toast'
 import type { DataSet } from '@/models/datasets'
@@ -63,45 +64,41 @@ const RenameDatasetModal = ({ show, dataset, onSuccess, onClose }: RenameDataset
 
   return (
     <Modal
-      className='px-8 py-6 max-w-[520px] w-[520px] rounded-xl'
+      className='w-[520px] max-w-[520px] rounded-xl px-8 py-6'
       isShow={show}
       onClose={() => { }}
     >
-      <div className='relative pb-2 text-xl font-medium leading-[30px] text-gray-900'>{t('datasetSettings.title')}</div>
-      <div className='absolute right-4 top-4 p-2 cursor-pointer' onClick={onClose}>
-        <RiCloseLine className='w-4 h-4 text-gray-500' />
+      <div className='relative pb-2 text-xl font-medium leading-[30px] text-text-primary'>{t('datasetSettings.title')}</div>
+      <div className='absolute right-4 top-4 cursor-pointer p-2' onClick={onClose}>
+        <RiCloseLine className='h-4 w-4 text-text-tertiary' />
       </div>
       <div>
-        <div className={cn('flex justify-between py-4 flex-wrap items-center')}>
-          <div className='shrink-0 py-2 text-sm font-medium leading-[20px] text-gray-900'>
+        <div className={cn('flex flex-wrap items-center justify-between py-4')}>
+          <div className='shrink-0 py-2 text-sm font-medium leading-[20px] text-text-primary'>
             {t('datasetSettings.form.name')}
           </div>
-          <input
+          <Input
             value={name}
             onChange={e => setName(e.target.value)}
-            className='block px-3 w-full h-9 bg-gray-100 rounded-lg text-sm text-gray-900 outline-none appearance-none'
+            className='h-9'
             placeholder={t('datasetSettings.form.namePlaceholder') || ''}
           />
         </div>
-        <div className={cn('flex justify-between py-4 flex-wrap items-center')}>
-          <div className='shrink-0 py-2 text-sm font-medium leading-[20px] text-gray-900'>
+        <div className={cn('flex flex-wrap items-center justify-between py-4')}>
+          <div className='shrink-0 py-2 text-sm font-medium leading-[20px] text-text-primary'>
             {t('datasetSettings.form.desc')}
           </div>
           <div className='w-full'>
-            <textarea
+            <Textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              className='block px-3 py-2 w-full h-[88px] rounded-lg bg-gray-100 text-sm outline-none appearance-none resize-none'
+              className='resize-none'
               placeholder={t('datasetSettings.form.descPlaceholder') || ''}
             />
-            <a className='mt-2 flex items-center h-[18px] px-3 text-xs text-gray-500 hover:text-primary-600' href="https://docs.dify.ai/features/datasets#how-to-write-a-good-dataset-description" target='_blank' rel='noopener noreferrer'>
-              <BookOpenIcon className='w-3 h-[18px] mr-1' />
-              {t('datasetSettings.form.descWrite')}
-            </a>
           </div>
         </div>
       </div>
-      <div className='pt-6 flex justify-end'>
+      <div className='flex justify-end pt-6'>
         <Button className='mr-2' onClick={onClose}>{t('common.operation.cancel')}</Button>
         <Button disabled={loading} variant="primary" onClick={onConfirm}>{t('common.operation.save')}</Button>
       </div>

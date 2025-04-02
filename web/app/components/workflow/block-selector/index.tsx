@@ -13,9 +13,6 @@ import type {
   OffsetOptions,
   Placement,
 } from '@floating-ui/react'
-import {
-  RiSearchLine,
-} from '@remixicon/react'
 import type { BlockEnum, OnSelectBlock } from '../types'
 import Tabs from './tabs'
 import { TabsEnum } from './types'
@@ -24,10 +21,12 @@ import {
   PortalToFollowElemContent,
   PortalToFollowElemTrigger,
 } from '@/app/components/base/portal-to-follow-elem'
+import Input from '@/app/components/base/input'
+import SearchBox from '@/app/components/plugins/marketplace/search-box'
+
 import {
   Plus02,
 } from '@/app/components/base/icons/src/vender/line/general'
-import { XCircle } from '@/app/components/base/icons/src/vender/solid/general'
 
 type NodeSelectorProps = {
   open?: boolean
@@ -63,6 +62,7 @@ const NodeSelector: FC<NodeSelectorProps> = ({
 }) => {
   const { t } = useTranslation()
   const [searchText, setSearchText] = useState('')
+  const [tags, setTags] = useState<string[]>([])
   const [localOpen, setLocalOpen] = useState(false)
   const open = openFromProps === undefined ? localOpen : openFromProps
   const handleOpenChange = useCallback((newOpen: boolean) => {
@@ -116,49 +116,49 @@ const NodeSelector: FC<NodeSelectorProps> = ({
             : (
               <div
                 className={`
-                  flex items-center justify-center 
-                  w-4 h-4 rounded-full bg-primary-600 cursor-pointer z-10
+                  z-10 flex h-4 
+                  w-4 cursor-pointer items-center justify-center rounded-full bg-components-button-primary-bg text-text-primary-on-surface hover:bg-components-button-primary-bg-hover
                   ${triggerClassName?.(open)}
                 `}
                 style={triggerStyle}
               >
-                <Plus02 className='w-2.5 h-2.5 text-white' />
+                <Plus02 className='h-2.5 w-2.5' />
               </div>
             )
         }
       </PortalToFollowElemTrigger>
       <PortalToFollowElemContent className='z-[1000]'>
         <div className={`rounded-lg border-[0.5px] border-gray-200 bg-white shadow-lg ${popupClassName}`}>
-          <div className='px-2 pt-2'>
-            <div
-              className='flex items-center px-2 rounded-lg bg-gray-100'
-              onClick={e => e.stopPropagation()}
-            >
-              <RiSearchLine className='shrink-0 ml-[1px] mr-[5px] w-3.5 h-3.5 text-gray-400' />
-              <input
+          <div className='px-2 pt-2' onClick={e => e.stopPropagation()}>
+            {activeTab === TabsEnum.Blocks && (
+              <Input
+                showLeftIcon
+                showClearIcon
+                autoFocus
                 value={searchText}
-                className='grow px-0.5 py-[7px] text-[13px] text-gray-700 bg-transparent appearance-none outline-none caret-primary-600 placeholder:text-gray-400'
                 placeholder={searchPlaceholder}
                 onChange={e => setSearchText(e.target.value)}
-                autoFocus
+                onClear={() => setSearchText('')}
               />
-              {
-                searchText && (
-                  <div
-                    className='flex items-center justify-center ml-[5px] w-[18px] h-[18px] cursor-pointer'
-                    onClick={() => setSearchText('')}
-                  >
-                    <XCircle className='w-[14px] h-[14px] text-gray-400' />
-                  </div>
-                )
-              }
-            </div>
+            )}
+            {activeTab === TabsEnum.Tools && (
+              <SearchBox
+                search={searchText}
+                onSearchChange={setSearchText}
+                tags={tags}
+                onTagsChange={setTags}
+                size='small'
+                placeholder={t('plugin.searchTools')!}
+              />
+            )}
+
           </div>
           <Tabs
             activeTab={activeTab}
             onActiveTabChange={handleActiveTabChange}
             onSelect={handleSelect}
             searchText={searchText}
+            tags={tags}
             availableBlocksTypes={availableBlocksTypes}
             noBlocks={noBlocks}
           />

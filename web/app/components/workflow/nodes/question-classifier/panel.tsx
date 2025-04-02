@@ -2,6 +2,8 @@ import type { FC } from 'react'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import VarReferencePicker from '../_base/components/variable/var-reference-picker'
+import ConfigVision from '../_base/components/config-vision'
+import { findVariableWhenOnLLMVision } from '../utils'
 import useConfig from './use-config'
 import ClassList from './components/class-list'
 import AdvancedSetting from './components/advanced-setting'
@@ -13,6 +15,8 @@ import BeforeRunForm from '@/app/components/workflow/nodes/_base/components/befo
 import ResultPanel from '@/app/components/workflow/run/result-panel'
 import Split from '@/app/components/workflow/nodes/_base/components/split'
 import OutputVars, { VarItem } from '@/app/components/workflow/nodes/_base/components/output-vars'
+import { FieldCollapse } from '@/app/components/workflow/nodes/_base/components/collapse'
+import type { Props as FormProps } from '@/app/components/workflow/nodes/_base/components/before-run-form/form'
 
 const i18nPrefix = 'workflow.nodes.questionClassifiers'
 
@@ -34,11 +38,15 @@ const Panel: FC<NodePanelProps<QuestionClassifierNodeType>> = ({
     hasSetBlockStatus,
     availableVars,
     availableNodesWithParent,
+    availableVisionVars,
     handleInstructionChange,
     inputVarValues,
     varInputs,
     setInputVarValues,
     handleMemoryChange,
+    isVisionModel,
+    handleVisionResolutionChange,
+    handleVisionResolutionEnabledChange,
     isShowSingleRun,
     hideSingleRun,
     runningStatus,
@@ -46,25 +54,53 @@ const Panel: FC<NodePanelProps<QuestionClassifierNodeType>> = ({
     handleStop,
     runResult,
     filterVar,
+    visionFiles,
+    setVisionFiles,
   } = useConfig(id, data)
 
   const model = inputs.model
 
+  const singleRunForms = (() => {
+    const forms: FormProps[] = []
+
+    forms.push(
+      {
+        label: t('workflow.nodes.llm.singleRun.variable')!,
+        inputs: [{
+          label: t(`${i18nPrefix}.inputVars`)!,
+          variable: 'query',
+          type: InputVarType.paragraph,
+          required: true,
+        }, ...varInputs],
+        values: inputVarValues,
+        onChange: setInputVarValues,
+      },
+    )
+
+    if (isVisionModel && data.vision?.enabled && data.vision?.configs?.variable_selector) {
+      const currentVariable = findVariableWhenOnLLMVision(data.vision.configs.variable_selector, availableVisionVars)
+
+      forms.push(
+        {
+          label: t('workflow.nodes.llm.vision')!,
+          inputs: [{
+            label: currentVariable?.variable as any,
+            variable: '#files#',
+            type: currentVariable?.formType as any,
+            required: false,
+          }],
+          values: { '#files#': visionFiles },
+          onChange: keyValue => setVisionFiles((keyValue as any)['#files#']),
+        },
+      )
+    }
+
+    return forms
+  })()
+
   return (
-    <div className='mt-2'>
-      <div className='px-4 pb-4 space-y-4'>
-        <Field
-          title={t(`${i18nPrefix}.inputVars`)}
-        >
-          <VarReferencePicker
-            readonly={readOnly}
-            isShowNodeName
-            nodeId={id}
-            value={inputs.query_variable_selector}
-            onChange={handleQueryVarChange}
-            filterVar={filterVar}
-          />
-        </Field>
+    <div className='pt-2'>
+      <div className='space-y-4 px-4'>
         <Field
           title={t(`${i18nPrefix}.model`)}
         >
@@ -84,36 +120,59 @@ const Panel: FC<NodePanelProps<QuestionClassifierNodeType>> = ({
           />
         </Field>
         <Field
+          title={t(`${i18nPrefix}.inputVars`)}
+        >
+          <VarReferencePicker
+            readonly={readOnly}
+            isShowNodeName
+            nodeId={id}
+            value={inputs.query_variable_selector}
+            onChange={handleQueryVarChange}
+            filterVar={filterVar}
+          />
+        </Field>
+        <Split />
+        <ConfigVision
+          nodeId={id}
+          readOnly={readOnly}
+          isVisionModel={isVisionModel}
+          enabled={inputs.vision?.enabled}
+          onEnabledChange={handleVisionResolutionEnabledChange}
+          config={inputs.vision?.configs}
+          onConfigChange={handleVisionResolutionChange}
+        />
+        <Field
           title={t(`${i18nPrefix}.class`)}
         >
           <ClassList
-            id={id}
+            nodeId={id}
             list={inputs.classes}
             onChange={handleTopicsChange}
             readonly={readOnly}
+            filterVar={filterVar}
           />
         </Field>
-        <Field
-          title={t(`${i18nPrefix}.advancedSetting`)}
-          supportFold
-        >
-          <AdvancedSetting
-            hideMemorySetting={!isChatMode}
-            instruction={inputs.instruction}
-            onInstructionChange={handleInstructionChange}
-            memory={inputs.memory}
-            onMemoryChange={handleMemoryChange}
-            readonly={readOnly}
-            isChatApp={isChatMode}
-            isChatModel={isChatModel}
-            hasSetBlockStatus={hasSetBlockStatus}
-            nodesOutputVars={availableVars}
-            availableNodes={availableNodesWithParent}
-          />
-        </Field>
+        <Split />
       </div>
+      <FieldCollapse
+        title={t(`${i18nPrefix}.advancedSetting`)}
+      >
+        <AdvancedSetting
+          hideMemorySetting={!isChatMode}
+          instruction={inputs.instruction}
+          onInstructionChange={handleInstructionChange}
+          memory={inputs.memory}
+          onMemoryChange={handleMemoryChange}
+          readonly={readOnly}
+          isChatApp={isChatMode}
+          isChatModel={isChatModel}
+          hasSetBlockStatus={hasSetBlockStatus}
+          nodesOutputVars={availableVars}
+          availableNodes={availableNodesWithParent}
+        />
+      </FieldCollapse>
       <Split />
-      <div className='px-4 pt-4 pb-2'>
+      <div>
         <OutputVars>
           <>
             <VarItem
@@ -128,18 +187,7 @@ const Panel: FC<NodePanelProps<QuestionClassifierNodeType>> = ({
         <BeforeRunForm
           nodeName={inputs.title}
           onHide={hideSingleRun}
-          forms={[
-            {
-              inputs: [{
-                label: t(`${i18nPrefix}.inputVars`)!,
-                variable: 'query',
-                type: InputVarType.paragraph,
-                required: true,
-              }, ...varInputs],
-              values: inputVarValues,
-              onChange: setInputVarValues,
-            },
-          ]}
+          forms={singleRunForms}
           runningStatus={runningStatus}
           onRun={handleRun}
           onStop={handleStop}

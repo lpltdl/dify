@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { useSearchParams } from 'next/navigation'
 import cn from 'classnames'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
+import Input from '../components/base/input'
 import Button from '@/app/components/base/button'
 import { changePasswordWithToken, verifyForgotPasswordToken } from '@/service/common'
 import Toast from '@/app/components/base/toast'
@@ -76,7 +77,7 @@ const ChangePasswordForm = () => {
   return (
     <div className={
       cn(
-        'flex flex-col items-center w-full grow justify-center',
+        'flex w-full grow flex-col items-center justify-center',
         'px-6',
         'md:px-[108px]',
       )
@@ -84,11 +85,11 @@ const ChangePasswordForm = () => {
       {!verifyTokenRes && <Loading />}
       {verifyTokenRes && !verifyTokenRes.is_valid && (
         <div className="flex flex-col md:w-[400px]">
-          <div className="w-full mx-auto">
-            <div className="mb-3 flex justify-center items-center w-20 h-20 p-5 rounded-[20px] border border-gray-100 shadow-lg text-[40px] font-bold">🤷‍♂️</div>
-            <h2 className="text-[32px] font-bold text-gray-900">{t('login.invalid')}</h2>
+          <div className="mx-auto w-full">
+            <div className="mb-3 flex h-20 w-20 items-center justify-center rounded-[20px] border border-divider-regular bg-components-option-card-option-bg p-5 text-[40px] font-bold shadow-lg">🤷‍♂️</div>
+            <h2 className="text-[32px] font-bold text-text-primary">{t('login.invalid')}</h2>
           </div>
-          <div className="w-full mx-auto mt-6">
+          <div className="mx-auto mt-6 w-full">
             <Button variant='primary' className='w-full !text-sm'>
               <a href="https://dify.ai">{t('login.explore')}</a>
             </Button>
@@ -97,49 +98,45 @@ const ChangePasswordForm = () => {
       )}
       {verifyTokenRes && verifyTokenRes.is_valid && !showSuccess && (
         <div className='flex flex-col md:w-[400px]'>
-          <div className="w-full mx-auto">
-            <h2 className="text-[32px] font-bold text-gray-900">
+          <div className="mx-auto w-full">
+            <h2 className="text-[32px] font-bold text-text-primary">
               {t('login.changePassword')}
             </h2>
-            <p className='mt-1 text-sm text-gray-600'>
+            <p className='mt-1 text-sm text-text-secondary'>
               {t('login.changePasswordTip')}
             </p>
           </div>
 
-          <div className="w-full mx-auto mt-6">
-            <div className="bg-white">
+          <div className="mx-auto mt-6 w-full">
+            <div className="relative">
               {/* Password */}
               <div className='mb-5'>
-                <label htmlFor="password" className="my-2 flex items-center justify-between text-sm font-medium text-gray-900">
+                <label htmlFor="password" className="my-2 flex items-center justify-between text-sm font-medium text-text-primary">
                   {t('common.account.newPassword')}
                 </label>
-                <div className="mt-1 relative rounded-md shadow-sm">
-                  <input
-                    id="password"
-                    type='password'
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder={t('login.passwordPlaceholder') || ''}
-                    className={'appearance-none block w-full rounded-lg pl-[14px] px-3 py-2 border border-gray-200 hover:border-gray-300 hover:shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400 caret-primary-600 sm:text-sm pr-10'}
-                  />
-                </div>
-                <div className='mt-1 text-xs text-gray-500'>{t('login.error.passwordInvalid')}</div>
+                <Input
+                  id="password"
+                  type='password'
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder={t('login.passwordPlaceholder') || ''}
+                  className='mt-1'
+                />
+                <div className='mt-1 text-xs text-text-secondary'>{t('login.error.passwordInvalid')}</div>
               </div>
               {/* Confirm Password */}
               <div className='mb-5'>
-                <label htmlFor="confirmPassword" className="my-2 flex items-center justify-between text-sm font-medium text-gray-900">
+                <label htmlFor="confirmPassword" className="my-2 flex items-center justify-between text-sm font-medium text-text-primary">
                   {t('common.account.confirmPassword')}
                 </label>
-                <div className="mt-1 relative rounded-md shadow-sm">
-                  <input
-                    id="confirmPassword"
-                    type='password'
-                    value={confirmPassword}
-                    onChange={e => setConfirmPassword(e.target.value)}
-                    placeholder={t('login.confirmPasswordPlaceholder') || ''}
-                    className={'appearance-none block w-full rounded-lg pl-[14px] px-3 py-2 border border-gray-200 hover:border-gray-300 hover:shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400 caret-primary-600 sm:text-sm pr-10'}
-                  />
-                </div>
+                <Input
+                  id="confirmPassword"
+                  type='password'
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder={t('login.confirmPasswordPlaceholder') || ''}
+                  className='mt-1'
+                />
               </div>
               <div>
                 <Button
@@ -156,16 +153,16 @@ const ChangePasswordForm = () => {
       )}
       {verifyTokenRes && verifyTokenRes.is_valid && showSuccess && (
         <div className="flex flex-col md:w-[400px]">
-          <div className="w-full mx-auto">
-            <div className="mb-3 flex justify-center items-center w-20 h-20 p-5 rounded-[20px] border border-gray-100 shadow-lg text-[40px] font-bold">
-              <CheckCircleIcon className='w-10 h-10 text-[#039855]' />
+          <div className="mx-auto w-full">
+            <div className="mb-3 flex h-20 w-20 items-center justify-center rounded-[20px] border border-divider-regular bg-components-option-card-option-bg p-5 text-[40px] font-bold shadow-lg">
+              <CheckCircleIcon className='h-10 w-10 text-[#039855]' />
             </div>
-            <h2 className="text-[32px] font-bold text-gray-900">
+            <h2 className="text-[32px] font-bold text-text-primary">
               {t('login.passwordChangedTip')}
             </h2>
           </div>
-          <div className="w-full mx-auto mt-6">
-            <Button variant='primary' className='w-full !text-sm'>
+          <div className="mx-auto mt-6 w-full">
+            <Button variant='primary' className='w-full'>
               <a href="/signin">{t('login.passwordChanged')}</a>
             </Button>
           </div>

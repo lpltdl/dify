@@ -6,10 +6,12 @@ import type {
   RerankingModeEnum,
   WeightedScoreEnum,
 } from '@/models/datasets'
+import type { UploadFileSetting } from '@/app/components/workflow/types'
 
 export enum Theme {
   light = 'light',
   dark = 'dark',
+  system = 'system',
 }
 
 export enum ProviderType {
@@ -24,14 +26,14 @@ export enum ProviderType {
 }
 
 export enum AppType {
-  'chat' = 'chat',
-  'completion' = 'completion',
+  chat = 'chat',
+  completion = 'completion',
 }
 
 export enum ModelModeType {
-  'chat' = 'chat',
-  'completion' = 'completion',
-  'unset' = '',
+  chat = 'chat',
+  completion = 'completion',
+  unset = '',
 }
 
 export enum RETRIEVE_TYPE {
@@ -109,9 +111,9 @@ export type ParagraphTypeFormItem = {
 export type UserInputFormItem = {
   'text-input': TextTypeFormItem
 } | {
-  'select': SelectTypeFormItem
+  select: SelectTypeFormItem
 } | {
-  'paragraph': TextTypeFormItem
+  paragraph: TextTypeFormItem
 }
 
 export type AgentTool = {
@@ -212,7 +214,7 @@ export type ModelConfig = {
   user_input_form: UserInputFormItem[]
   dataset_query_variable?: string
   more_like_this: {
-    enabled: boolean
+    enabled?: boolean
   }
   suggested_questions_after_answer: {
     enabled: boolean
@@ -242,9 +244,10 @@ export type ModelConfig = {
   dataset_configs: DatasetConfigs
   file_upload?: {
     image: VisionSettings
-  }
+  } & UploadFileSetting
   files?: VisionFile[]
   created_at?: number
+  updated_at?: number
 }
 
 export type Language = typeof LanguagesSupported[number]
@@ -349,6 +352,13 @@ export type App = {
   /** api site url */
   api_base_url: string
   tags: Tag[]
+  workflow?: {
+    id: string
+    created_at: number
+    created_by?: string
+    updated_at: number
+    updated_by?: string
+  }
 }
 
 export type AppSSO = {

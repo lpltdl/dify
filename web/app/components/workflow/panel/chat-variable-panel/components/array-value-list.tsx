@@ -6,6 +6,7 @@ import { RiAddLine } from '@remixicon/react'
 import produce from 'immer'
 import RemoveButton from '@/app/components/workflow/nodes/_base/components/remove-button'
 import Button from '@/app/components/base/button'
+import Input from '@/app/components/base/input'
 
 type Props = {
   isString: boolean
@@ -49,21 +50,20 @@ const ArrayValueList: FC<Props> = ({
     <div className='w-full space-y-2'>
       {list.map((item, index) => (
         <div className='flex items-center space-x-1' key={index}>
-          <input
-            className='block px-3 w-full h-8 bg-components-input-bg-normal system-sm-regular radius-md border border-transparent appearance-none outline-none caret-primary-600 hover:border-components-input-border-hover hover:bg-components-input-bg-hover focus:bg-components-input-bg-active focus:border-components-input-border-active focus:shadow-xs placeholder:system-sm-regular placeholder:text-components-input-text-placeholder'
+          <Input
             placeholder={t('workflow.chatVariable.modal.arrayValue') || ''}
             value={list[index]}
             onChange={handleNameChange(index)}
             type={isString ? 'text' : 'number'}
           />
           <RemoveButton
-            className='!p-2 !bg-gray-100 hover:!bg-gray-200'
+            className='!bg-gray-100 !p-2 hover:!bg-gray-200'
             onClick={handleItemRemove(index)}
           />
         </div>
       ))}
       <Button variant='tertiary' className='w-full' onClick={handleItemAdd}>
-        <RiAddLine className='mr-1 w-4 h-4' />
+        <RiAddLine className='mr-1 h-4 w-4' />
         <span>{t('workflow.chatVariable.modal.addArrayValue')}</span>
       </Button>
     </div>

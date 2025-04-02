@@ -1,24 +1,42 @@
-from collections.abc import Mapping, Sequence
-from os import path
+from collections.abc import Generator, Mapping, Sequence
 from typing import Any, cast
 
-from core.app.segments import ArrayAnySegment, ArrayAnyVariable, parser
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from core.callback_handler.workflow_tool_callback_handler import DifyWorkflowCallbackHandler
-from core.file.file_obj import FileTransferMethod, FileType, FileVar
+from core.file import File, FileTransferMethod
+from core.plugin.manager.exc import PluginDaemonClientSideError
+from core.plugin.manager.plugin import PluginInstallationManager
 from core.tools.entities.tool_entities import ToolInvokeMessage, ToolParameter
+from core.tools.errors import ToolInvokeError
 from core.tools.tool_engine import ToolEngine
-from core.tools.tool_manager import ToolManager
 from core.tools.utils.message_transformer import ToolFileMessageTransformer
-from core.workflow.entities.node_entities import NodeRunMetadataKey, NodeRunResult, NodeType
+from core.variables.segments import ArrayAnySegment
+from core.variables.variables import ArrayAnyVariable
+from core.workflow.entities.node_entities import NodeRunMetadataKey, NodeRunResult
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.enums import SystemVariableKey
-from core.workflow.nodes.base_node import BaseNode
-from core.workflow.nodes.tool.entities import ToolNodeData
+from core.workflow.graph_engine.entities.event import AgentLogEvent
+from core.workflow.nodes.base import BaseNode
+from core.workflow.nodes.enums import NodeType
+from core.workflow.nodes.event import RunCompletedEvent, RunStreamChunkEvent
 from core.workflow.utils.variable_template_parser import VariableTemplateParser
-from models import WorkflowNodeExecutionStatus
+from extensions.ext_database import db
+from factories import file_factory
+from models import ToolFile
+from models.workflow import WorkflowNodeExecutionStatus
+from services.tools.builtin_tools_manage_service import BuiltinToolManageService
+
+from .entities import ToolNodeData
+from .exc import (
+    ToolFileError,
+    ToolNodeError,
+    ToolParameterError,
+)
 
 
-class ToolNode(BaseNode):
+class ToolNode(BaseNode[ToolNodeData]):
     """
     Tool Node
     """
@@ -26,7 +44,7 @@ class ToolNode(BaseNode):
     _node_data_cls = ToolNodeData
     _node_type = NodeType.TOOL
 
-    def _run(self) -> NodeRunResult:
+    def _run(self) -> Generator:
         """
         Run the tool node
         """
@@ -34,59 +52,84 @@ class ToolNode(BaseNode):
         node_data = cast(ToolNodeData, self.node_data)
 
         # fetch tool icon
-        tool_info = {"provider_type": node_data.provider_type, "provider_id": node_data.provider_id}
+        tool_info = {
+            "provider_type": node_data.provider_type.value,
+            "provider_id": node_data.provider_id,
+            "plugin_unique_identifier": node_data.plugin_unique_identifier,
+        }
 
         # get tool runtime
         try:
+            from core.tools.tool_manager import ToolManager
+
             tool_runtime = ToolManager.get_workflow_tool_runtime(
-                self.tenant_id, self.app_id, self.node_id, node_data, self.invoke_from
+                self.tenant_id, self.app_id, self.node_id, self.node_data, self.invoke_from
             )
-        except Exception as e:
-            return NodeRunResult(
-                status=WorkflowNodeExecutionStatus.FAILED,
-                inputs={},
-                metadata={NodeRunMetadataKey.TOOL_INFO: tool_info},
-                error=f"Failed to get tool runtime: {str(e)}",
+        except ToolNodeError as e:
+            yield RunCompletedEvent(
+                run_result=NodeRunResult(
+                    status=WorkflowNodeExecutionStatus.FAILED,
+                    inputs={},
+                    metadata={NodeRunMetadataKey.TOOL_INFO: tool_info},
+                    error=f"Failed to get tool runtime: {str(e)}",
+                    error_type=type(e).__name__,
+                )
             )
+            return
 
         # get parameters
-        tool_parameters = tool_runtime.get_runtime_parameters() or []
+        tool_parameters = tool_runtime.get_merged_runtime_parameters() or []
         parameters = self._generate_parameters(
-            tool_parameters=tool_parameters, variable_pool=self.graph_runtime_state.variable_pool, node_data=node_data
+            tool_parameters=tool_parameters,
+            variable_pool=self.graph_runtime_state.variable_pool,
+            node_data=self.node_data,
         )
         parameters_for_log = self._generate_parameters(
             tool_parameters=tool_parameters,
             variable_pool=self.graph_runtime_state.variable_pool,
-            node_data=node_data,
+            node_data=self.node_data,
             for_log=True,
         )
 
+        # get conversation id
+        conversation_id = self.graph_runtime_state.variable_pool.get(["sys", SystemVariableKey.CONVERSATION_ID])
+
         try:
-            messages = ToolEngine.workflow_invoke(
+            message_stream = ToolEngine.generic_invoke(
                 tool=tool_runtime,
                 tool_parameters=parameters,
                 user_id=self.user_id,
                 workflow_tool_callback=DifyWorkflowCallbackHandler(),
                 workflow_call_depth=self.workflow_call_depth,
                 thread_pool_id=self.thread_pool_id,
+                app_id=self.app_id,
+                conversation_id=conversation_id.text if conversation_id else None,
             )
-        except Exception as e:
-            return NodeRunResult(
-                status=WorkflowNodeExecutionStatus.FAILED,
-                inputs=parameters_for_log,
-                metadata={NodeRunMetadataKey.TOOL_INFO: tool_info},
-                error=f"Failed to invoke tool: {str(e)}",
+        except ToolNodeError as e:
+            yield RunCompletedEvent(
+                run_result=NodeRunResult(
+                    status=WorkflowNodeExecutionStatus.FAILED,
+                    inputs=parameters_for_log,
+                    metadata={NodeRunMetadataKey.TOOL_INFO: tool_info},
+                    error=f"Failed to invoke tool: {str(e)}",
+                    error_type=type(e).__name__,
+                )
             )
+            return
 
-        # convert tool messages
-        plain_text, files, json = self._convert_tool_messages(messages)
-
-        return NodeRunResult(
-            status=WorkflowNodeExecutionStatus.SUCCEEDED,
-            outputs={"text": plain_text, "files": files, "json": json},
-            metadata={NodeRunMetadataKey.TOOL_INFO: tool_info},
-            inputs=parameters_for_log,
-        )
+        try:
+            # convert tool messages
+            yield from self._transform_message(message_stream, tool_info, parameters_for_log)
+        except (PluginDaemonClientSideError, ToolInvokeError) as e:
+            yield RunCompletedEvent(
+                run_result=NodeRunResult(
+                    status=WorkflowNodeExecutionStatus.FAILED,
+                    inputs=parameters_for_log,
+                    metadata={NodeRunMetadataKey.TOOL_INFO: tool_info},
+                    error=f"Failed to transform tool message: {str(e)}",
+                    error_type=type(e).__name__,
+                )
+            )
 
     def _generate_parameters(
         self,
@@ -95,7 +138,7 @@ class ToolNode(BaseNode):
         variable_pool: VariablePool,
         node_data: ToolNodeData,
         for_log: bool = False,
-    ) -> Mapping[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate parameters based on the given tool parameters, variable pool, and node data.
 
@@ -110,120 +153,233 @@ class ToolNode(BaseNode):
         """
         tool_parameters_dictionary = {parameter.name: parameter for parameter in tool_parameters}
 
-        result = {}
+        result: dict[str, Any] = {}
         for parameter_name in node_data.tool_parameters:
             parameter = tool_parameters_dictionary.get(parameter_name)
             if not parameter:
                 result[parameter_name] = None
                 continue
-            if parameter.type == ToolParameter.ToolParameterType.FILE:
-                result[parameter_name] = [v.to_dict() for v in self._fetch_files(variable_pool)]
+            tool_input = node_data.tool_parameters[parameter_name]
+            if tool_input.type == "variable":
+                variable = variable_pool.get(tool_input.value)
+                if variable is None:
+                    raise ToolParameterError(f"Variable {tool_input.value} does not exist")
+                parameter_value = variable.value
+            elif tool_input.type in {"mixed", "constant"}:
+                segment_group = variable_pool.convert_template(str(tool_input.value))
+                parameter_value = segment_group.log if for_log else segment_group.text
             else:
-                tool_input = node_data.tool_parameters[parameter_name]
-                if tool_input.type == "variable":
-                    # TODO: check if the variable exists in the variable pool
-                    parameter_value = variable_pool.get(tool_input.value).value
-                else:
-                    segment_group = parser.convert_template(
-                        template=str(tool_input.value),
-                        variable_pool=variable_pool,
-                    )
-                    parameter_value = segment_group.log if for_log else segment_group.text
-                result[parameter_name] = parameter_value
+                raise ToolParameterError(f"Unknown tool input type '{tool_input.type}'")
+            result[parameter_name] = parameter_value
 
         return result
 
-    def _fetch_files(self, variable_pool: VariablePool) -> list[FileVar]:
+    def _fetch_files(self, variable_pool: VariablePool) -> list[File]:
         variable = variable_pool.get(["sys", SystemVariableKey.FILES.value])
         assert isinstance(variable, ArrayAnyVariable | ArrayAnySegment)
         return list(variable.value) if variable else []
 
-    def _convert_tool_messages(self, messages: list[ToolInvokeMessage]) -> tuple[str, list[FileVar], list[dict]]:
+    def _transform_message(
+        self,
+        messages: Generator[ToolInvokeMessage, None, None],
+        tool_info: Mapping[str, Any],
+        parameters_for_log: dict[str, Any],
+    ) -> Generator:
         """
         Convert ToolInvokeMessages into tuple[plain_text, files]
         """
         # transform message and handle file storage
-        messages = ToolFileMessageTransformer.transform_tool_invoke_messages(
+        message_stream = ToolFileMessageTransformer.transform_tool_invoke_messages(
             messages=messages,
             user_id=self.user_id,
             tenant_id=self.tenant_id,
             conversation_id=None,
         )
-        # extract plain text and files
-        files = self._extract_tool_response_binary(messages)
-        plain_text = self._extract_tool_response_text(messages)
-        json = self._extract_tool_response_json(messages)
 
-        return plain_text, files, json
+        text = ""
+        files: list[File] = []
+        json: list[dict] = []
 
-    def _extract_tool_response_binary(self, tool_response: list[ToolInvokeMessage]) -> list[FileVar]:
-        """
-        Extract tool response binary
-        """
-        result = []
+        agent_logs: list[AgentLogEvent] = []
+        agent_execution_metadata: Mapping[NodeRunMetadataKey, Any] = {}
 
-        for response in tool_response:
-            if response.type in {ToolInvokeMessage.MessageType.IMAGE_LINK, ToolInvokeMessage.MessageType.IMAGE}:
-                url = response.message
-                ext = path.splitext(url)[1]
-                mimetype = response.meta.get("mime_type", "image/jpeg")
-                filename = response.save_as or url.split("/")[-1]
-                transfer_method = response.meta.get("transfer_method", FileTransferMethod.TOOL_FILE)
+        variables: dict[str, Any] = {}
 
+        for message in message_stream:
+            if message.type in {
+                ToolInvokeMessage.MessageType.IMAGE_LINK,
+                ToolInvokeMessage.MessageType.BINARY_LINK,
+                ToolInvokeMessage.MessageType.IMAGE,
+            }:
+                assert isinstance(message.message, ToolInvokeMessage.TextMessage)
+
+                url = message.message.text
+                if message.meta:
+                    transfer_method = message.meta.get("transfer_method", FileTransferMethod.TOOL_FILE)
+                else:
+                    transfer_method = FileTransferMethod.TOOL_FILE
+
+                tool_file_id = str(url).split("/")[-1].split(".")[0]
+
+                with Session(db.engine) as session:
+                    stmt = select(ToolFile).where(ToolFile.id == tool_file_id)
+                    tool_file = session.scalar(stmt)
+                    if tool_file is None:
+                        raise ToolFileError(f"Tool file {tool_file_id} does not exist")
+
+                mapping = {
+                    "tool_file_id": tool_file_id,
+                    "type": file_factory.get_file_type_by_mime_type(tool_file.mimetype),
+                    "transfer_method": transfer_method,
+                    "url": url,
+                }
+                file = file_factory.build_from_mapping(
+                    mapping=mapping,
+                    tenant_id=self.tenant_id,
+                )
+                files.append(file)
+            elif message.type == ToolInvokeMessage.MessageType.BLOB:
                 # get tool file id
-                tool_file_id = url.split("/")[-1].split(".")[0]
-                result.append(
-                    FileVar(
+                assert isinstance(message.message, ToolInvokeMessage.TextMessage)
+                assert message.meta
+
+                tool_file_id = message.message.text.split("/")[-1].split(".")[0]
+                with Session(db.engine) as session:
+                    stmt = select(ToolFile).where(ToolFile.id == tool_file_id)
+                    tool_file = session.scalar(stmt)
+                    if tool_file is None:
+                        raise ToolFileError(f"tool file {tool_file_id} not exists")
+
+                mapping = {
+                    "tool_file_id": tool_file_id,
+                    "transfer_method": FileTransferMethod.TOOL_FILE,
+                }
+
+                files.append(
+                    file_factory.build_from_mapping(
+                        mapping=mapping,
                         tenant_id=self.tenant_id,
-                        type=FileType.IMAGE,
-                        transfer_method=transfer_method,
-                        url=url,
-                        related_id=tool_file_id,
-                        filename=filename,
-                        extension=ext,
-                        mime_type=mimetype,
                     )
                 )
-            elif response.type == ToolInvokeMessage.MessageType.BLOB:
-                # get tool file id
-                tool_file_id = response.message.split("/")[-1].split(".")[0]
-                result.append(
-                    FileVar(
-                        tenant_id=self.tenant_id,
-                        type=FileType.IMAGE,
-                        transfer_method=FileTransferMethod.TOOL_FILE,
-                        related_id=tool_file_id,
-                        filename=response.save_as,
-                        extension=path.splitext(response.save_as)[1],
-                        mime_type=response.meta.get("mime_type", "application/octet-stream"),
-                    )
+            elif message.type == ToolInvokeMessage.MessageType.TEXT:
+                assert isinstance(message.message, ToolInvokeMessage.TextMessage)
+                text += message.message.text
+                yield RunStreamChunkEvent(
+                    chunk_content=message.message.text, from_variable_selector=[self.node_id, "text"]
                 )
-            elif response.type == ToolInvokeMessage.MessageType.LINK:
-                pass  # TODO:
+            elif message.type == ToolInvokeMessage.MessageType.JSON:
+                assert isinstance(message.message, ToolInvokeMessage.JsonMessage)
+                if self.node_type == NodeType.AGENT:
+                    msg_metadata = message.message.json_object.pop("execution_metadata", {})
+                    agent_execution_metadata = {
+                        key: value
+                        for key, value in msg_metadata.items()
+                        if key in NodeRunMetadataKey.__members__.values()
+                    }
+                json.append(message.message.json_object)
+            elif message.type == ToolInvokeMessage.MessageType.LINK:
+                assert isinstance(message.message, ToolInvokeMessage.TextMessage)
+                stream_text = f"Link: {message.message.text}\n"
+                text += stream_text
+                yield RunStreamChunkEvent(chunk_content=stream_text, from_variable_selector=[self.node_id, "text"])
+            elif message.type == ToolInvokeMessage.MessageType.VARIABLE:
+                assert isinstance(message.message, ToolInvokeMessage.VariableMessage)
+                variable_name = message.message.variable_name
+                variable_value = message.message.variable_value
+                if message.message.stream:
+                    if not isinstance(variable_value, str):
+                        raise ValueError("When 'stream' is True, 'variable_value' must be a string.")
+                    if variable_name not in variables:
+                        variables[variable_name] = ""
+                    variables[variable_name] += variable_value
 
-        return result
+                    yield RunStreamChunkEvent(
+                        chunk_content=variable_value, from_variable_selector=[self.node_id, variable_name]
+                    )
+                else:
+                    variables[variable_name] = variable_value
+            elif message.type == ToolInvokeMessage.MessageType.FILE:
+                assert message.meta is not None
+                files.append(message.meta["file"])
+            elif message.type == ToolInvokeMessage.MessageType.LOG:
+                assert isinstance(message.message, ToolInvokeMessage.LogMessage)
+                if message.message.metadata:
+                    icon = tool_info.get("icon", "")
+                    dict_metadata = dict(message.message.metadata)
+                    if dict_metadata.get("provider"):
+                        manager = PluginInstallationManager()
+                        plugins = manager.list_plugins(self.tenant_id)
+                        try:
+                            current_plugin = next(
+                                plugin
+                                for plugin in plugins
+                                if f"{plugin.plugin_id}/{plugin.name}" == dict_metadata["provider"]
+                            )
+                            icon = current_plugin.declaration.icon
+                        except StopIteration:
+                            pass
+                        try:
+                            builtin_tool = next(
+                                provider
+                                for provider in BuiltinToolManageService.list_builtin_tools(
+                                    self.user_id,
+                                    self.tenant_id,
+                                )
+                                if provider.name == dict_metadata["provider"]
+                            )
+                            icon = builtin_tool.icon
+                        except StopIteration:
+                            pass
 
-    def _extract_tool_response_text(self, tool_response: list[ToolInvokeMessage]) -> str:
-        """
-        Extract tool response text
-        """
-        return "\n".join(
-            [
-                f"{message.message}"
-                if message.type == ToolInvokeMessage.MessageType.TEXT
-                else f"Link: {message.message}"
-                if message.type == ToolInvokeMessage.MessageType.LINK
-                else ""
-                for message in tool_response
-            ]
+                        dict_metadata["icon"] = icon
+                        message.message.metadata = dict_metadata
+                agent_log = AgentLogEvent(
+                    id=message.message.id,
+                    node_execution_id=self.id,
+                    parent_id=message.message.parent_id,
+                    error=message.message.error,
+                    status=message.message.status.value,
+                    data=message.message.data,
+                    label=message.message.label,
+                    metadata=message.message.metadata,
+                    node_id=self.node_id,
+                )
+
+                # check if the agent log is already in the list
+                for log in agent_logs:
+                    if log.id == agent_log.id:
+                        # update the log
+                        log.data = agent_log.data
+                        log.status = agent_log.status
+                        log.error = agent_log.error
+                        log.label = agent_log.label
+                        log.metadata = agent_log.metadata
+                        break
+                else:
+                    agent_logs.append(agent_log)
+
+                yield agent_log
+
+        yield RunCompletedEvent(
+            run_result=NodeRunResult(
+                status=WorkflowNodeExecutionStatus.SUCCEEDED,
+                outputs={"text": text, "files": files, "json": json, **variables},
+                metadata={
+                    **agent_execution_metadata,
+                    NodeRunMetadataKey.TOOL_INFO: tool_info,
+                    NodeRunMetadataKey.AGENT_LOG: agent_logs,
+                },
+                inputs=parameters_for_log,
+            )
         )
-
-    def _extract_tool_response_json(self, tool_response: list[ToolInvokeMessage]) -> list[dict]:
-        return [message.message for message in tool_response if message.type == ToolInvokeMessage.MessageType.JSON]
 
     @classmethod
     def _extract_variable_selector_to_variable_mapping(
-        cls, graph_config: Mapping[str, Any], node_id: str, node_data: ToolNodeData
+        cls,
+        *,
+        graph_config: Mapping[str, Any],
+        node_id: str,
+        node_data: ToolNodeData,
     ) -> Mapping[str, Sequence[str]]:
         """
         Extract variable selector to variable mapping
@@ -236,6 +392,7 @@ class ToolNode(BaseNode):
         for parameter_name in node_data.tool_parameters:
             input = node_data.tool_parameters[parameter_name]
             if input.type == "mixed":
+                assert isinstance(input.value, str)
                 selectors = VariableTemplateParser(input.value).extract_variable_selectors()
                 for selector in selectors:
                     result[selector.variable] = selector.value_selector

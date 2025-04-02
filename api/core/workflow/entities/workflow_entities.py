@@ -3,11 +3,12 @@ from typing import Optional
 from pydantic import BaseModel
 
 from core.app.entities.app_invoke_entities import InvokeFrom
-from core.workflow.entities.base_node_data_entities import BaseIterationState
-from core.workflow.entities.node_entities import NodeRunResult
-from core.workflow.entities.variable_pool import VariablePool
-from core.workflow.nodes.base_node import BaseNode, UserFrom
+from core.workflow.nodes.base import BaseIterationState, BaseLoopState, BaseNode
+from models.enums import UserFrom
 from models.workflow import Workflow, WorkflowType
+
+from .node_entities import NodeRunResult
+from .variable_pool import VariablePool
 
 
 class WorkflowNodeAndResult:
@@ -40,11 +41,13 @@ class WorkflowRunState:
     class NodeRun(BaseModel):
         node_id: str
         iteration_node_id: str
+        loop_node_id: str
 
     workflow_node_runs: list[NodeRun]
     workflow_node_steps: int
 
     current_iteration_state: Optional[BaseIterationState]
+    current_loop_state: Optional[BaseLoopState]
 
     def __init__(
         self,
@@ -73,3 +76,4 @@ class WorkflowRunState:
         self.workflow_node_steps = 1
         self.workflow_node_runs = []
         self.current_iteration_state = None
+        self.current_loop_state = None

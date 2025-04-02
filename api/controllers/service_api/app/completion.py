@@ -1,10 +1,9 @@
 import logging
 
-from flask_restful import Resource, reqparse
+from flask_restful import Resource, reqparse  # type: ignore
 from werkzeug.exceptions import InternalServerError, NotFound
 
 import services
-from constants import UUID_NIL
 from controllers.service_api import api
 from controllers.service_api.app.error import (
     AppUnavailableError,
@@ -16,10 +15,10 @@ from controllers.service_api.app.error import (
     ProviderQuotaExceededError,
 )
 from controllers.service_api.wraps import FetchUserArg, WhereisUserArg, validate_app_token
+from controllers.web.error import InvokeRateLimitError as InvokeRateLimitHttpError
 from core.app.apps.base_app_queue_manager import AppQueueManager
 from core.app.entities.app_invoke_entities import InvokeFrom
 from core.errors.error import (
-    AppInvokeQuotaExceededError,
     ModelCurrentlyNotSupportError,
     ProviderTokenNotInitError,
     QuotaExceededError,
@@ -29,6 +28,7 @@ from libs import helper
 from libs.helper import uuid_value
 from models.model import App, AppMode, EndUser
 from services.app_generate_service import AppGenerateService
+from services.errors.llm import InvokeRateLimitError
 
 
 class CompletionApi(Resource):
@@ -75,9 +75,9 @@ class CompletionApi(Resource):
             raise ProviderModelCurrentlyNotSupportError()
         except InvokeError as e:
             raise CompletionRequestError(e.description)
-        except (ValueError, AppInvokeQuotaExceededError) as e:
+        except ValueError as e:
             raise e
-        except Exception as e:
+        except Exception:
             logging.exception("internal server error.")
             raise InternalServerError()
 
@@ -108,7 +108,6 @@ class ChatApi(Resource):
         parser.add_argument("conversation_id", type=uuid_value, location="json")
         parser.add_argument("retriever_from", type=str, required=False, default="dev", location="json")
         parser.add_argument("auto_generate_name", type=bool, required=False, default=True, location="json")
-        parser.add_argument("parent_message_id", type=uuid_value, required=False, default=UUID_NIL, location="json")
 
         args = parser.parse_args()
 
@@ -133,11 +132,13 @@ class ChatApi(Resource):
             raise ProviderQuotaExceededError()
         except ModelCurrentlyNotSupportError:
             raise ProviderModelCurrentlyNotSupportError()
+        except InvokeRateLimitError as ex:
+            raise InvokeRateLimitHttpError(ex.description)
         except InvokeError as e:
             raise CompletionRequestError(e.description)
-        except (ValueError, AppInvokeQuotaExceededError) as e:
+        except ValueError as e:
             raise e
-        except Exception as e:
+        except Exception:
             logging.exception("internal server error.")
             raise InternalServerError()
 

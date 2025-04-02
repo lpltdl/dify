@@ -6,7 +6,7 @@ export const useNodeHelpLink = (nodeType: BlockEnum) => {
   const language = useGetLanguage()
   const prefixLink = useMemo(() => {
     if (language === 'zh_Hans')
-      return 'https://docs.dify.ai/v/zh-hans/guides/workflow/node/'
+      return 'https://docs.dify.ai/zh-hans/guides/workflow/node/'
 
     return 'https://docs.dify.ai/guides/workflow/node/'
   }, [language])
@@ -17,18 +17,22 @@ export const useNodeHelpLink = (nodeType: BlockEnum) => {
         [BlockEnum.End]: 'end',
         [BlockEnum.Answer]: 'answer',
         [BlockEnum.LLM]: 'llm',
-        [BlockEnum.KnowledgeRetrieval]: 'knowledge_retrieval',
-        [BlockEnum.QuestionClassifier]: 'question_classifier',
+        [BlockEnum.KnowledgeRetrieval]: 'knowledge-retrieval',
+        [BlockEnum.QuestionClassifier]: 'question-classifier',
         [BlockEnum.IfElse]: 'ifelse',
         [BlockEnum.Code]: 'code',
         [BlockEnum.TemplateTransform]: 'template',
-        [BlockEnum.VariableAssigner]: 'variable_assigner',
-        [BlockEnum.VariableAggregator]: 'variable_assigner',
-        [BlockEnum.Assigner]: 'variable_assignment',
+        [BlockEnum.VariableAssigner]: 'variable-assigner',
+        [BlockEnum.VariableAggregator]: 'variable-aggregator',
+        [BlockEnum.Assigner]: 'variable-assigner',
         [BlockEnum.Iteration]: 'iteration',
-        [BlockEnum.ParameterExtractor]: 'parameter_extractor',
-        [BlockEnum.HttpRequest]: 'http_request',
+        [BlockEnum.Loop]: 'loop',
+        [BlockEnum.ParameterExtractor]: 'parameter-extractor',
+        [BlockEnum.HttpRequest]: 'http-request',
         [BlockEnum.Tool]: 'tools',
+        [BlockEnum.DocExtractor]: 'doc-extractor',
+        [BlockEnum.ListFilter]: 'list-operator',
+        [BlockEnum.Agent]: 'agent',
       }
     }
 
@@ -39,18 +43,27 @@ export const useNodeHelpLink = (nodeType: BlockEnum) => {
       [BlockEnum.LLM]: 'llm',
       [BlockEnum.KnowledgeRetrieval]: 'knowledge-retrieval',
       [BlockEnum.QuestionClassifier]: 'question-classifier',
-      [BlockEnum.IfElse]: 'if-else',
+      [BlockEnum.IfElse]: 'ifelse',
       [BlockEnum.Code]: 'code',
       [BlockEnum.TemplateTransform]: 'template',
       [BlockEnum.VariableAssigner]: 'variable-assigner',
-      [BlockEnum.VariableAggregator]: 'variable-assigner',
-      [BlockEnum.Assigner]: 'variable-assignment',
+      [BlockEnum.VariableAggregator]: 'variable-aggregator',
+      [BlockEnum.Assigner]: 'variable-assigner',
       [BlockEnum.Iteration]: 'iteration',
+      [BlockEnum.Loop]: 'loop',
       [BlockEnum.ParameterExtractor]: 'parameter-extractor',
       [BlockEnum.HttpRequest]: 'http-request',
       [BlockEnum.Tool]: 'tools',
+      [BlockEnum.DocExtractor]: 'doc-extractor',
+      [BlockEnum.ListFilter]: 'list-operator',
+      [BlockEnum.Agent]: 'agent',
     }
-  }, [language])
+  }, [language]) as Record<string, string>
 
-  return `${prefixLink}${linkMap[nodeType]}`
+  const link = linkMap[nodeType]
+
+  if (!link)
+    return ''
+
+  return `${prefixLink}${link}`
 }

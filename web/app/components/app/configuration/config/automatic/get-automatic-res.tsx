@@ -18,20 +18,25 @@ import cn from 'classnames'
 import s from './style.module.css'
 import Modal from '@/app/components/base/modal'
 import Button from '@/app/components/base/button'
+import Textarea from '@/app/components/base/textarea'
 import Toast from '@/app/components/base/toast'
 import { generateRule } from '@/service/debug'
 import ConfigPrompt from '@/app/components/app/configuration/config-prompt'
 import type { Model } from '@/types/app'
 import { AppType } from '@/types/app'
 import ConfigVar from '@/app/components/app/configuration/config-var'
-import OpeningStatement from '@/app/components/app/configuration/features/chat-group/opening-statement'
 import GroupName from '@/app/components/app/configuration/base/group-name'
 import Loading from '@/app/components/base/loading'
 import Confirm from '@/app/components/base/confirm'
+import { LoveMessage } from '@/app/components/base/icons/src/vender/features'
 
 // type
 import type { AutomaticRes } from '@/service/debug'
 import { Generator } from '@/app/components/base/icons/src/vender/other'
+import ModelIcon from '@/app/components/header/account-setting/model-provider-page/model-icon'
+import ModelName from '@/app/components/header/account-setting/model-provider-page/model-name'
+import { ModelTypeEnum } from '@/app/components/header/account-setting/model-provider-page/declarations'
+import { useModelListAndDefaultModelAndCurrentProviderAndModel } from '@/app/components/header/account-setting/model-provider-page/hooks'
 
 export type IGetAutomaticResProps = {
   mode: AppType
@@ -49,11 +54,11 @@ const TryLabel: FC<{
 }> = ({ Icon, text, onClick }) => {
   return (
     <div
-      className='mt-2 mr-1 shrink-0 flex h-7 items-center px-2 bg-gray-100 rounded-lg cursor-pointer'
+      className='mr-1 mt-2 flex h-7 shrink-0 cursor-pointer items-center rounded-lg bg-components-button-secondary-bg px-2'
       onClick={onClick}
     >
-      <Icon className='w-4 h-4 text-gray-500'></Icon>
-      <div className='ml-1 text-xs font-medium text-gray-700'>{text}</div>
+      <Icon className='h-4 w-4 text-text-tertiary'></Icon>
+      <div className='ml-1 text-xs font-medium text-text-secondary'>{text}</div>
     </div>
   )
 }
@@ -67,7 +72,10 @@ const GetAutomaticRes: FC<IGetAutomaticResProps> = ({
   onFinished,
 }) => {
   const { t } = useTranslation()
-
+  const {
+    currentProvider,
+    currentModel,
+  } = useModelListAndDefaultModelAndCurrentProviderAndModel(ModelTypeEnum.textGeneration)
   const tryList = [
     {
       icon: RiTerminalBoxLine,
@@ -130,16 +138,16 @@ const GetAutomaticRes: FC<IGetAutomaticResProps> = ({
   const [res, setRes] = React.useState<AutomaticRes | null>(null)
 
   const renderLoading = (
-    <div className='w-0 grow flex flex-col items-center justify-center h-full space-y-3'>
+    <div className='flex h-full w-0 grow flex-col items-center justify-center space-y-3'>
       <Loading />
-      <div className='text-[13px] text-gray-400'>{t('appDebug.generate.loading')}</div>
+      <div className='text-[13px] text-text-tertiary'>{t('appDebug.generate.loading')}</div>
     </div>
   )
 
   const renderNoData = (
-    <div className='w-0 grow flex flex-col items-center px-8 justify-center h-full space-y-3'>
-      <Generator className='w-14 h-14 text-gray-300' />
-      <div className='leading-5 text-center text-[13px] font-normal text-gray-400'>
+    <div className='flex h-full w-0 grow flex-col items-center justify-center space-y-3 px-8'>
+      <Generator className='h-14 w-14 text-text-tertiary' />
+      <div className='text-center text-[13px] font-normal leading-5 text-text-tertiary'>
         <div>{t('appDebug.generate.noDataLine1')}</div>
         <div>{t('appDebug.generate.noDataLine2')}</div>
       </div>
@@ -181,19 +189,32 @@ const GetAutomaticRes: FC<IGetAutomaticResProps> = ({
     <Modal
       isShow={isShow}
       onClose={onClose}
-      className='!p-0 min-w-[1140px]'
+      className='min-w-[1140px] !p-0'
       closable
     >
       <div className='flex h-[680px] flex-wrap'>
-        <div className='w-[570px] shrink-0 p-6 h-full overflow-y-auto border-r border-gray-100'>
+        <div className='h-full w-[570px] shrink-0 overflow-y-auto border-r border-divider-regular p-6'>
           <div className='mb-8'>
-            <div className={`leading-[28px] text-lg font-bold ${s.textGradient}`}>{t('appDebug.generate.title')}</div>
-            <div className='mt-1 text-[13px] font-normal text-gray-500'>{t('appDebug.generate.description')}</div>
+            <div className={`text-lg font-bold leading-[28px] ${s.textGradient}`}>{t('appDebug.generate.title')}</div>
+            <div className='mt-1 text-[13px] font-normal text-text-tertiary'>{t('appDebug.generate.description')}</div>
+          </div>
+          <div className='mb-8 flex items-center'>
+            <ModelIcon
+              className='mr-1.5 shrink-0 '
+              provider={currentProvider}
+              modelName={currentModel?.model}
+            />
+            <ModelName
+              className='grow'
+              modelItem={currentModel!}
+              showMode
+              showFeatures
+            />
           </div>
           <div >
             <div className='flex items-center'>
-              <div className='mr-3 shrink-0 leading-[18px] text-xs font-semibold text-gray-500 uppercase'>{t('appDebug.generate.tryIt')}</div>
-              <div className='grow h-px' style={{
+              <div className='mr-3 shrink-0 text-xs font-semibold uppercase leading-[18px] text-text-tertiary'>{t('appDebug.generate.tryIt')}</div>
+              <div className='h-px grow' style={{
                 background: 'linear-gradient(to right, rgba(243, 244, 246, 1), rgba(243, 244, 246, 0))',
               }}></div>
             </div>
@@ -211,8 +232,12 @@ const GetAutomaticRes: FC<IGetAutomaticResProps> = ({
           {/* inputs */}
           <div className='mt-6'>
             <div className='text-[0px]'>
-              <div className='mb-2 leading-5 text-sm font-medium text-gray-900'>{t('appDebug.generate.instruction')}</div>
-              <textarea className="w-full h-[200px] overflow-y-auto px-3 py-2 text-sm bg-gray-50 rounded-lg" placeholder={t('appDebug.generate.instructionPlaceHolder') as string} value={instruction} onChange={e => setInstruction(e.target.value)} />
+              <div className='mb-2 text-sm font-medium leading-5 text-text-primary'>{t('appDebug.generate.instruction')}</div>
+              <Textarea
+                className="h-[200px] resize-none"
+                placeholder={t('appDebug.generate.instructionPlaceHolder') as string}
+                value={instruction}
+                onChange={e => setInstruction(e.target.value)} />
             </div>
 
             <div className='mt-5 flex justify-end'>
@@ -222,7 +247,7 @@ const GetAutomaticRes: FC<IGetAutomaticResProps> = ({
                 onClick={onGenerate}
                 disabled={isLoading}
               >
-                <Generator className='w-4 h-4 text-white' />
+                <Generator className='h-4 w-4 text-white' />
                 <span className='text-xs font-semibold text-white'>{t('appDebug.generate.generate')}</span>
               </Button>
             </div>
@@ -230,8 +255,8 @@ const GetAutomaticRes: FC<IGetAutomaticResProps> = ({
         </div>
 
         {(!isLoading && res) && (
-          <div className='w-0 grow p-6 pb-0 h-full'>
-            <div className='shrink-0 mb-3 leading-[160%] text-base font-semibold text-gray-800'>{t('appDebug.generate.resTitle')}</div>
+          <div className='h-full w-0 grow p-6 pb-0'>
+            <div className='mb-3 shrink-0 text-base font-semibold leading-[160%] text-text-secondary'>{t('appDebug.generate.resTitle')}</div>
             <div className={cn('max-h-[555px] overflow-y-auto', !isInLLMNode && 'pb-2')}>
               <ConfigPrompt
                 mode={mode}
@@ -257,17 +282,26 @@ const GetAutomaticRes: FC<IGetAutomaticResProps> = ({
                   {(mode !== AppType.completion && res?.opening_statement) && (
                     <div className='mt-7'>
                       <GroupName name={t('appDebug.feature.groupChat.title')} />
-                      <OpeningStatement
-                        value={res?.opening_statement || ''}
-                        readonly
-                      />
+                      <div
+                        className='mb-1 rounded-xl border-l-[0.5px] border-t-[0.5px] border-effects-highlight bg-background-section-burn p-3'
+                      >
+                        <div className='mb-2 flex items-center gap-2'>
+                          <div className='shrink-0 rounded-lg border-[0.5px] border-divider-subtle bg-util-colors-blue-light-blue-light-500 p-1 shadow-xs'>
+                            <LoveMessage className='h-4 w-4 text-text-primary-on-surface' />
+                          </div>
+                          <div className='system-sm-semibold flex grow items-center text-text-secondary'>
+                            {t('appDebug.feature.conversationOpener.title')}
+                          </div>
+                        </div>
+                        <div className='system-xs-regular min-h-8 text-text-tertiary'>{res.opening_statement}</div>
+                      </div>
                     </div>
                   )}
                 </>
               )}
             </div>
 
-            <div className='flex justify-end py-4 bg-white'>
+            <div className='flex justify-end bg-background-default py-4'>
               <Button onClick={onClose}>{t('common.operation.cancel')}</Button>
               <Button variant='primary' className='ml-2' onClick={() => {
                 setShowConfirmOverwrite(true)

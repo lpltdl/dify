@@ -22,10 +22,11 @@ import type {
 import type { ThemeBuilder } from '../embedded-chatbot/theme/theme-context'
 import Question from './question'
 import Answer from './answer'
-import ChatInput from './chat-input'
+import ChatInputArea from './chat-input-area'
 import TryToAsk from './try-to-ask'
 import { ChatContextProvider } from './context'
-import classNames from '@/utils/classnames'
+import type { InputForm } from './type'
+import cn from '@/utils/classnames'
 import type { Emoji } from '@/app/components/tools/types'
 import Button from '@/app/components/base/button'
 import { StopCircle } from '@/app/components/base/icons/src/vender/solid/mediaAndDevices'
@@ -43,6 +44,8 @@ export type ChatProps = {
   onStopResponding?: () => void
   noChatInput?: boolean
   onSend?: OnSend
+  inputs?: Record<string, any>
+  inputsForm?: InputForm[]
   onRegenerate?: OnRegenerate
   chatContainerClassName?: string
   chatContainerInnerClassName?: string
@@ -62,13 +65,22 @@ export type ChatProps = {
   hideProcessDetail?: boolean
   hideLogModal?: boolean
   themeBuilder?: ThemeBuilder
+  switchSibling?: (siblingMessageId: string) => void
+  showFeatureBar?: boolean
+  showFileUpload?: boolean
+  onFeatureBarClick?: (state: boolean) => void
   noSpacing?: boolean
+  inputDisabled?: boolean
+  isMobile?: boolean
+  sidebarCollapseState?: boolean
 }
 
 const Chat: FC<ChatProps> = ({
   appData,
   config,
   onSend,
+  inputs,
+  inputsForm,
   onRegenerate,
   chatList,
   isResponding,
@@ -83,7 +95,6 @@ const Chat: FC<ChatProps> = ({
   showPromptLog,
   questionIcon,
   answerIcon,
-  allToolIcons,
   onAnnotationAdded,
   onAnnotationEdited,
   onAnnotationRemoved,
@@ -93,7 +104,14 @@ const Chat: FC<ChatProps> = ({
   hideProcessDetail,
   hideLogModal,
   themeBuilder,
+  switchSibling,
+  showFeatureBar,
+  showFileUpload,
+  onFeatureBarClick,
   noSpacing,
+  inputDisabled,
+  isMobile,
+  sidebarCollapseState,
 }) => {
   const { t } = useTranslation()
   const { currentLogItem, setCurrentLogItem, showPromptLogModal, setShowPromptLogModal, showAgentLogModal, setShowAgentLogModal } = useAppStore(useShallow(state => ({
@@ -148,19 +166,28 @@ const Chat: FC<ChatProps> = ({
 
   useEffect(() => {
     if (chatFooterRef.current && chatContainerRef.current) {
-      const resizeObserver = new ResizeObserver((entries) => {
+      // container padding bottom
+      const resizeContainerObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
           const { blockSize } = entry.borderBoxSize[0]
-
           chatContainerRef.current!.style.paddingBottom = `${blockSize}px`
           handleScrollToBottom()
         }
       })
+      resizeContainerObserver.observe(chatFooterRef.current)
 
-      resizeObserver.observe(chatFooterRef.current)
+      // footer width
+      const resizeFooterObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const { inlineSize } = entry.borderBoxSize[0]
+          chatFooterRef.current!.style.width = `${inlineSize}px`
+        }
+      })
+      resizeFooterObserver.observe(chatContainerRef.current)
 
       return () => {
-        resizeObserver.disconnect()
+        resizeContainerObserver.disconnect()
+        resizeFooterObserver.disconnect()
       }
     }
   }, [handleScrollToBottom])
@@ -170,12 +197,17 @@ const Chat: FC<ChatProps> = ({
     if (chatContainer) {
       const setUserScrolled = () => {
         if (chatContainer)
-          userScrolledRef.current = chatContainer.scrollHeight - chatContainer.scrollTop >= chatContainer.clientHeight + 300
+          userScrolledRef.current = chatContainer.scrollHeight - chatContainer.scrollTop > chatContainer.clientHeight
       }
       chatContainer.addEventListener('scroll', setUserScrolled)
       return () => chatContainer.removeEventListener('scroll', setUserScrolled)
     }
   }, [])
+
+  useEffect(() => {
+    if (!sidebarCollapseState)
+      setTimeout(() => handleWindowResize(), 200)
+  }, [sidebarCollapseState])
 
   const hasTryToAsk = config?.suggested_questions_after_answer?.enabled && !!suggestedQuestions?.length && onSend
 
@@ -187,7 +219,6 @@ const Chat: FC<ChatProps> = ({
       showPromptLog={showPromptLog}
       questionIcon={questionIcon}
       answerIcon={answerIcon}
-      allToolIcons={allToolIcons}
       onSend={onSend}
       onRegenerate={onRegenerate}
       onAnnotationAdded={onAnnotationAdded}
@@ -198,12 +229,12 @@ const Chat: FC<ChatProps> = ({
       <div className='relative h-full'>
         <div
           ref={chatContainerRef}
-          className={classNames('relative h-full overflow-y-auto overflow-x-hidden', chatContainerClassName)}
+          className={cn('relative h-full overflow-y-auto overflow-x-hidden', chatContainerClassName)}
         >
           {chatNode}
           <div
             ref={chatContainerInnerRef}
-            className={classNames('w-full', !noSpacing && 'px-8', chatContainerInnerClassName)}
+            className={cn('w-full', !noSpacing && 'px-8', chatContainerInnerClassName)}
           >
             {
               chatList.map((item, index) => {
@@ -219,11 +250,11 @@ const Chat: FC<ChatProps> = ({
                       config={config}
                       answerIcon={answerIcon}
                       responding={isLast && isResponding}
-                      allToolIcons={allToolIcons}
                       showPromptLog={showPromptLog}
                       chatAnswerContainerInner={chatAnswerContainerInner}
                       hideProcessDetail={hideProcessDetail}
                       noChatInput={noChatInput}
+                      switchSibling={switchSibling}
                     />
                   )
                 }
@@ -240,22 +271,19 @@ const Chat: FC<ChatProps> = ({
           </div>
         </div>
         <div
-          className={`absolute bottom-0 ${(hasTryToAsk || !noChatInput || !noStopResponding) && chatFooterClassName}`}
+          className={`absolute bottom-0 flex justify-center bg-chat-input-mask ${(hasTryToAsk || !noChatInput || !noStopResponding) && chatFooterClassName}`}
           ref={chatFooterRef}
-          style={{
-            background: 'linear-gradient(0deg, #F9FAFB 40%, rgba(255, 255, 255, 0.00) 100%)',
-          }}
         >
           <div
             ref={chatFooterInnerRef}
-            className={`${chatFooterInnerClassName}`}
+            className={cn('relative', chatFooterInnerClassName)}
           >
             {
               !noStopResponding && isResponding && (
-                <div className='flex justify-center mb-2'>
+                <div className='mb-2 flex justify-center'>
                   <Button onClick={onStopResponding}>
-                    <StopCircle className='mr-[5px] w-3.5 h-3.5 text-gray-500' />
-                    <span className='text-xs text-gray-500 font-normal'>{t('appDebug.operation.stopResponding')}</span>
+                    <StopCircle className='mr-[5px] h-3.5 w-3.5 text-gray-500' />
+                    <span className='text-xs font-normal text-gray-500'>{t('appDebug.operation.stopResponding')}</span>
                   </Button>
                 </div>
               )
@@ -265,17 +293,25 @@ const Chat: FC<ChatProps> = ({
                 <TryToAsk
                   suggestedQuestions={suggestedQuestions}
                   onSend={onSend}
+                  isMobile={isMobile}
                 />
               )
             }
             {
               !noChatInput && (
-                <ChatInput
-                  visionConfig={config?.file_upload?.image}
+                <ChatInputArea
+                  disabled={inputDisabled}
+                  showFeatureBar={showFeatureBar}
+                  showFileUpload={showFileUpload}
+                  featureBarDisabled={isResponding}
+                  onFeatureBarClick={onFeatureBarClick}
+                  visionConfig={config?.file_upload}
                   speechToTextConfig={config?.speech_to_text}
                   onSend={onSend}
+                  inputs={inputs}
+                  inputsForm={inputsForm}
                   theme={themeBuilder?.theme}
-                  noSpacing={noSpacing}
+                  isResponding={isResponding}
                 />
               )
             }
